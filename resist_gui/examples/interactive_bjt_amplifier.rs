@@ -88,7 +88,7 @@ fn main() -> eframe::Result {
     let transient = ckt
         .build_transient(3e-3, 1e-6)
         .solve()
-        .expect("Transient failed");
+        .map_err(|e| e.to_string());
 
     // DC Sweep (I-V curve of the input)
     let mut iv_sweeps = HashMap::new();
@@ -116,105 +116,56 @@ fn main() -> eframe::Result {
     // ── Build Schematic Layout ─────────────────────────────────
     let mut layout = CircuitLayout::default();
 
-    // Node positions on grid for tooltips
-    layout
-        .node_positions
-        .insert(in_node, GridPoint::new(10, 20));
-    layout.node_positions.insert(base, GridPoint::new(24, 20));
-    layout.node_positions.insert(coll, GridPoint::new(34, 16));
-    layout.node_positions.insert(emit, GridPoint::new(34, 22));
-    layout.node_positions.insert(vcc, GridPoint::new(50, 10));
-    layout
-        .node_positions
-        .insert(NodeId::GROUND, GridPoint::new(30, 32));
+    // Node tooltips
+    layout.node_positions.insert(in_node, Position::new(80.0, 200.0));
+    layout.node_positions.insert(base, Position::new(260.0, 200.0));
+    layout.node_positions.insert(coll, Position::new(360.0, 140.0));
+    layout.node_positions.insert(emit, Position::new(360.0, 260.0));
+    layout.node_positions.insert(vcc, Position::new(480.0, 40.0));
+    layout.node_positions.insert(NodeId::GROUND, Position::new(480.0, 400.0));
 
-    // Wires (Orthogonal / Manhattan Routing)
-    // Input net
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(10, 23),
-        GridPoint::new(10, 20),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(10, 20),
-        GridPoint::new(14, 20),
-    ));
-    // Base net
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(18, 20),
-        GridPoint::new(24, 20),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(24, 20),
-        GridPoint::new(24, 17),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(24, 20),
-        GridPoint::new(24, 23),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(24, 20),
-        GridPoint::new(30, 20),
-    ));
-    // Collector net
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(34, 18),
-        GridPoint::new(34, 16),
-    ));
-    // Emitter net
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(34, 22),
-        GridPoint::new(34, 24),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(34, 22),
-        GridPoint::new(40, 22),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(40, 22),
-        GridPoint::new(40, 24),
-    ));
-    // VCC net
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(24, 13),
-        GridPoint::new(24, 10),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(34, 12),
-        GridPoint::new(34, 10),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(24, 10),
-        GridPoint::new(50, 10),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(50, 10),
-        GridPoint::new(50, 18),
-    ));
-    // GND net
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(10, 27),
-        GridPoint::new(10, 32),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(24, 27),
-        GridPoint::new(24, 32),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(34, 28),
-        GridPoint::new(34, 32),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(40, 28),
-        GridPoint::new(40, 32),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(50, 22),
-        GridPoint::new(50, 32),
-    ));
-    layout.wires.push(WireSegment::new(
-        GridPoint::new(10, 32),
-        GridPoint::new(50, 32),
-    ));
+    // Wires (Explicit Manhattan)
+    // VCC Net (Y = 40.0)
+    layout.wires.push(WireSegment::new(Position::new(260.0, 40.0), Position::new(480.0, 40.0)));
+    layout.wires.push(WireSegment::new(Position::new(260.0, 80.0), Position::new(260.0, 40.0))); // R1 top
+    layout.wires.push(WireSegment::new(Position::new(360.0, 80.0), Position::new(360.0, 40.0))); // Rc top
+    layout.wires.push(WireSegment::new(Position::new(480.0, 160.0), Position::new(480.0, 40.0))); // V1 top
+
+    // GND Net (Y = 400.0)
+    layout.wires.push(WireSegment::new(Position::new(80.0, 400.0), Position::new(480.0, 400.0)));
+    layout.wires.push(WireSegment::new(Position::new(80.0, 320.0), Position::new(80.0, 400.0))); // Vin bot
+    layout.wires.push(WireSegment::new(Position::new(260.0, 320.0), Position::new(260.0, 400.0))); // R2 bot
+    layout.wires.push(WireSegment::new(Position::new(360.0, 320.0), Position::new(360.0, 400.0))); // Re bot
+    layout.wires.push(WireSegment::new(Position::new(420.0, 320.0), Position::new(420.0, 400.0))); // Ce bot
+    layout.wires.push(WireSegment::new(Position::new(480.0, 200.0), Position::new(480.0, 400.0))); // V1 bot
+
+    // In Net
+    layout.wires.push(WireSegment::new(Position::new(80.0, 280.0), Position::new(80.0, 200.0))); // Vin top
+    layout.wires.push(WireSegment::new(Position::new(80.0, 200.0), Position::new(140.0, 200.0))); // Cin left
+
+    // Base Net
+    layout.wires.push(WireSegment::new(Position::new(180.0, 200.0), Position::new(320.0, 200.0))); // Cin right to Q1 base
+    layout.wires.push(WireSegment::new(Position::new(260.0, 200.0), Position::new(260.0, 120.0))); // R1 bot
+    layout.wires.push(WireSegment::new(Position::new(260.0, 200.0), Position::new(260.0, 280.0))); // R2 top
+
+    // Coll Net
+    layout.wires.push(WireSegment::new(Position::new(360.0, 120.0), Position::new(360.0, 180.0))); // Rc bot to Q1 coll
+
+    // Emit Net
+    layout.wires.push(WireSegment::new(Position::new(360.0, 220.0), Position::new(360.0, 280.0))); // Q1 emit to Re top
+    layout.wires.push(WireSegment::new(Position::new(360.0, 260.0), Position::new(420.0, 260.0))); // Emit node to Ce block
+    layout.wires.push(WireSegment::new(Position::new(420.0, 260.0), Position::new(420.0, 280.0))); // Ce top
+
+    // Junctions
+    layout.junctions.push(Position::new(260.0, 40.0));
+    layout.junctions.push(Position::new(360.0, 40.0));
+    layout.junctions.push(Position::new(80.0, 400.0));
+    layout.junctions.push(Position::new(260.0, 400.0));
+    layout.junctions.push(Position::new(360.0, 400.0));
+    layout.junctions.push(Position::new(420.0, 400.0));
+    layout.junctions.push(Position::new(80.0, 200.0));
+    layout.junctions.push(Position::new(260.0, 200.0));
+    layout.junctions.push(Position::new(360.0, 260.0));
 
     // Components
     layout.components.push(ComponentInfo {
@@ -223,7 +174,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::TransientSource,
         node_a: in_node,
         node_b: NodeId::GROUND,
-        pos: GridPoint::new(10, 25),
+        pos: Position::new(80.0, 300.0),
         rotation: Rotation::Deg90,
     });
     layout.components.push(ComponentInfo {
@@ -232,7 +183,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Capacitor(10e-6),
         node_a: in_node,
         node_b: base,
-        pos: GridPoint::new(16, 20),
+        pos: Position::new(160.0, 200.0),
         rotation: Rotation::Deg0,
     });
     layout.components.push(ComponentInfo {
@@ -241,7 +192,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Resistor(47_000.0),
         node_a: vcc,
         node_b: base,
-        pos: GridPoint::new(24, 15),
+        pos: Position::new(260.0, 100.0),
         rotation: Rotation::Deg90,
     });
     layout.components.push(ComponentInfo {
@@ -250,7 +201,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Resistor(10_000.0),
         node_a: base,
         node_b: NodeId::GROUND,
-        pos: GridPoint::new(24, 25),
+        pos: Position::new(260.0, 300.0),
         rotation: Rotation::Deg90,
     });
     layout.components.push(ComponentInfo {
@@ -259,7 +210,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Bjt { is_npn: true },
         node_a: coll,
         node_b: emit,
-        pos: GridPoint::new(32, 20),
+        pos: Position::new(340.0, 200.0),
         rotation: Rotation::Deg0,
     });
     layout.components.push(ComponentInfo {
@@ -268,7 +219,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Resistor(4_700.0),
         node_a: vcc,
         node_b: coll,
-        pos: GridPoint::new(34, 14),
+        pos: Position::new(360.0, 100.0),
         rotation: Rotation::Deg90,
     });
     layout.components.push(ComponentInfo {
@@ -277,7 +228,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Resistor(1_000.0),
         node_a: emit,
         node_b: NodeId::GROUND,
-        pos: GridPoint::new(34, 26),
+        pos: Position::new(360.0, 300.0),
         rotation: Rotation::Deg90,
     });
     layout.components.push(ComponentInfo {
@@ -286,7 +237,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::Capacitor(100e-6),
         node_a: emit,
         node_b: NodeId::GROUND,
-        pos: GridPoint::new(40, 26),
+        pos: Position::new(420.0, 300.0),
         rotation: Rotation::Deg90,
     });
     layout.components.push(ComponentInfo {
@@ -295,7 +246,7 @@ fn main() -> eframe::Result {
         kind: ComponentKind::VoltageSource(12.0),
         node_a: vcc,
         node_b: NodeId::GROUND,
-        pos: GridPoint::new(50, 20),
+        pos: Position::new(480.0, 180.0),
         rotation: Rotation::Deg90,
     });
 

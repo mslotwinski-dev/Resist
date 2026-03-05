@@ -4,16 +4,23 @@ use resist::analysis::nonlinear::NonLinearDcResult;
 use resist::analysis::transient::TransientResult;
 use resist::NodeId;
 
-/// Integer coordinates on the schematic grid.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct GridPoint {
-    pub x: i32,
-    pub y: i32,
+/// Explicit coordinates on the schematic canvas.
+#[derive(Clone, Copy, Debug)]
+pub struct Position {
+    pub x: f32,
+    pub y: f32,
 }
 
-impl GridPoint {
-    pub fn new(x: i32, y: i32) -> Self {
+impl Position {
+    pub fn new(x: f32, y: f32) -> Self {
         Self { x, y }
+    }
+}
+
+// Equality based on a small epsilon since it's float
+impl PartialEq for Position {
+    fn eq(&self, other: &Self) -> bool {
+        (self.x - other.x).abs() < 1e-3 && (self.y - other.y).abs() < 1e-3
     }
 }
 
@@ -40,8 +47,8 @@ pub struct ComponentInfo {
     pub kind: ComponentKind,
     pub node_a: NodeId,
     pub node_b: NodeId,
-    /// Grid position of the component's Anchor (usually its center).
-    pub pos: GridPoint,
+    /// Explicit center position on the canvas.
+    pub pos: Position,
     pub rotation: Rotation,
 }
 
@@ -56,18 +63,19 @@ pub enum ComponentKind {
     Bjt { is_npn: bool },
     Mosfet { is_nmos: bool },
     TransientSource,
+    OpAmp,
 }
 
-/// An explicit orthogonal wire segment connecting two grid points.
+/// An explicit orthongonal wire segment connecting two absolute positions.
 #[derive(Clone, Debug)]
 pub struct WireSegment {
-    pub a: GridPoint,
-    pub b: GridPoint,
+    pub start: Position,
+    pub end: Position,
 }
 
 impl WireSegment {
-    pub fn new(a: GridPoint, b: GridPoint) -> Self {
-        Self { a, b }
+    pub fn new(start: Position, end: Position) -> Self {
+        Self { start, end }
     }
 }
 
@@ -75,10 +83,12 @@ impl WireSegment {
 #[derive(Clone, Default)]
 pub struct CircuitLayout {
     pub components: Vec<ComponentInfo>,
-    /// Node label → grid position (used for junction dots and tooltips).
-    pub node_positions: HashMap<NodeId, GridPoint>,
+    /// Node label → absolute position (used for tooltips/hit testing).
+    pub node_positions: HashMap<NodeId, Position>,
     /// Explicit wires connecting nodes and component pins.
     pub wires: Vec<WireSegment>,
+    /// Explicit junction points to draw connection dots.
+    pub junctions: Vec<Position>,
 }
 
 /// I-V sweep data point.
@@ -106,7 +116,7 @@ impl Default for SelectedEntity {
 /// All simulation data needed by the GUI.
 pub struct SimState {
     pub dc: Option<NonLinearDcResult>,
-    pub transient: Option<TransientResult>,
+    pub transient: Option<Result<TransientResult, String>>,
     pub bode: Vec<(f64, resist::analysis::ac::AcAnalysisResult)>,
     pub iv_sweeps: HashMap<String, Vec<IvPoint>>,
     pub layout: CircuitLayout,

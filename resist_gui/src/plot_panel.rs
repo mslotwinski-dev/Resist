@@ -29,15 +29,29 @@ pub fn draw_plot(ui: &mut egui::Ui, sim: &SimState) {
 }
 
 fn draw_transient(ui: &mut egui::Ui, sim: &SimState) {
-    let Some(tr) = &sim.transient else {
-        ui.centered_and_justified(|ui| {
-            ui.label(
-                egui::RichText::new("No transient data loaded.")
-                    .color(egui::Color32::from_rgb(120, 120, 140))
-                    .size(16.0),
-            );
-        });
-        return;
+    let tr = match &sim.transient {
+        Some(Ok(res)) => res,
+        Some(Err(err_msg)) => {
+            ui.centered_and_justified(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("🚨 Simulation Failed: {}", err_msg))
+                        .color(egui::Color32::RED)
+                        .strong()
+                        .size(18.0),
+                );
+            });
+            return;
+        }
+        None => {
+            ui.centered_and_justified(|ui| {
+                ui.label(
+                    egui::RichText::new("No transient data loaded.")
+                        .color(egui::Color32::from_rgb(120, 120, 140))
+                        .size(16.0),
+                );
+            });
+            return;
+        }
     };
 
     ui.heading(

@@ -63,46 +63,34 @@ impl Component for Inductor {
 
 impl AcComponent for Inductor {
     fn stamp_ac(&self, mna: &mut ComplexMnaMatrix, omega: f64) -> Result<(), ResistError> {
-        if omega == 0.0 {
-            let eq = mna.num_nodes + self.equation_idx;
-            let one = Complex64::new(1.0, 0.0);
-            if let Some(a) = self.node_a.matrix_idx() {
-                mna.matrix[(a, eq)] += one;
-                mna.matrix[(eq, a)] += one;
-            }
-            if let Some(b) = self.node_b.matrix_idx() {
-                mna.matrix[(b, eq)] -= one;
-                mna.matrix[(eq, b)] -= one;
-            }
-            return Ok(());
-        }
+        let eq = mna.num_nodes + self.equation_idx;
+        let one = Complex64::new(1.0, 0.0);
 
-        let y = Complex64::new(0.0, -1.0 / (omega * self.inductance));
-
+        // V_A - V_B - I_L * jwL = 0
         if let Some(a) = self.node_a.matrix_idx() {
-            mna.matrix[(a, a)] += y;
+            mna.matrix[(a, eq)] += one;
+            mna.matrix[(eq, a)] += one;
         }
         if let Some(b) = self.node_b.matrix_idx() {
-            mna.matrix[(b, b)] += y;
+            mna.matrix[(b, eq)] -= one;
+            mna.matrix[(eq, b)] -= one;
         }
-        if let (Some(a), Some(b)) = (self.node_a.matrix_idx(), self.node_b.matrix_idx()) {
-            mna.matrix[(a, b)] -= y;
-            mna.matrix[(b, a)] -= y;
+
+        if omega > 0.0 {
+            mna.matrix[(eq, eq)] -= Complex64::new(0.0, omega * self.inductance);
         }
         Ok(())
     }
 }
 
-/// Backward Euler companion model for an inductor:
+/// Backward Euler companion model for an inductor (Equation Formulation):
 ///
-/// ```text
-///   G_L = Δt / L
-///   I_hist = G_L × V_L(t_prev)  +  I_L(t_prev)
-/// ```
+/// V_a - V_b = L * dI/dt
+/// V_a(t) - V_b(t) - (L / dt) * I_L(t) = - (L / dt) * I_L(t - dt)
 ///
-/// The inductor is replaced by a conductance `G_L` in **parallel** with
-/// a current source `I_hist`.  The current through the inductor at the
-/// previous time step is stored in the branch-current slot of `x_prev`.
+/// The `Component::stamp` method already adds the cross terms representing
+/// the voltage drop and branch current `I_L`. We just need to add the
+/// `-L/dt` term to the diagonal of the equation row and the history RHS.
 impl TransientComponent for Inductor {
     fn stamp_transient(
         &self,
@@ -110,36 +98,13 @@ impl TransientComponent for Inductor {
         dt: f64,
         x_prev: &DVector<f64>,
     ) -> Result<(), ResistError> {
-        let g = dt / self.inductance;
+        let eq = mna.num_nodes + self.equation_idx;
+        let l_dt = self.inductance / dt;
 
-        // Stamp conductance
-        if let Some(a) = self.node_a.matrix_idx() {
-            mna.matrix[(a, a)] += g;
-        }
-        if let Some(b) = self.node_b.matrix_idx() {
-            mna.matrix[(b, b)] += g;
-        }
-        if let (Some(a), Some(b)) = (self.node_a.matrix_idx(), self.node_b.matrix_idx()) {
-            mna.matrix[(a, b)] -= g;
-            mna.matrix[(b, a)] -= g;
-        }
+        mna.matrix[(eq, eq)] -= l_dt;
 
-        // Previous voltage across inductor
-        let va_prev = self.node_a.matrix_idx().map(|i| x_prev[i]).unwrap_or(0.0);
-        let vb_prev = self.node_b.matrix_idx().map(|i| x_prev[i]).unwrap_or(0.0);
-
-        // Previous current through inductor (from the branch current slot)
-        let i_prev = x_prev[mna.num_nodes + self.equation_idx];
-
-        // History current: I_hist = G_L × V_L(prev) + I_L(prev)
-        let i_hist = g * (va_prev - vb_prev) + i_prev;
-
-        if let Some(a) = self.node_a.matrix_idx() {
-            mna.rhs[a] += i_hist;
-        }
-        if let Some(b) = self.node_b.matrix_idx() {
-            mna.rhs[b] -= i_hist;
-        }
+        let i_prev = x_prev[eq];
+        mna.rhs[eq] -= l_dt * i_prev;
 
         Ok(())
     }

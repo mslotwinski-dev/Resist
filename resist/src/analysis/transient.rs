@@ -9,9 +9,10 @@ use crate::error::ResistError;
 /// Performs **transient** (time-domain) analysis using Backward Euler
 /// numerical integration and Adaptive Time Stepping.
 pub struct TransientAnalyzer<'a> {
-    circuit: &'a Circuit,
+    pub circuit: &'a Circuit,
     t_stop: f64,
     dt_initial: f64,
+    max_dt: Option<f64>,
 }
 
 #[derive(Clone)]
@@ -31,7 +32,13 @@ impl<'a> TransientAnalyzer<'a> {
             circuit,
             t_stop,
             dt_initial,
+            max_dt: None,
         }
+    }
+
+    pub fn with_max_dt(mut self, max_dt: f64) -> Self {
+        self.max_dt = Some(max_dt);
+        self
     }
 
     pub fn solve(&self) -> Result<TransientResult, ResistError> {
@@ -57,8 +64,7 @@ impl<'a> TransientAnalyzer<'a> {
 
         let mut t = 0.0;
         let mut dt = self.dt_initial;
-        let dt_min = self.dt_initial * 1e-6; // Don't get stuck forever
-        let dt_max = self.dt_initial * 100.0;
+        let dt_max = self.max_dt.unwrap_or(self.t_stop / 2000.0);
 
         while t < self.t_stop {
             if t + dt > self.t_stop {
@@ -129,12 +135,12 @@ impl<'a> TransientAnalyzer<'a> {
                 if iter_count <= 4 {
                     dt = (dt * 1.5).min(dt_max); // Too easy, increase step
                 } else if iter_count >= 10 {
-                    dt = (dt * 0.5).max(dt_min); // Just scraping by, reduce next step
+                    dt = (dt * 0.5).max(1e-15); // Just scraping by, reduce next step
                 }
             } else {
-                // Step rejected
-                dt *= 0.1; // Cut drastically
-                if dt < dt_min {
+                // Step rejected: Discard x_guess, do not advance t
+                dt /= 8.0; // Cut aggressively
+                if dt < 1e-15 {
                     return Err(ResistError::ConvergenceError {
                         iterations: 100,
                         residual: 0.0,

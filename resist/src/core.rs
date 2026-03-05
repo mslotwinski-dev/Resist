@@ -32,11 +32,16 @@ pub struct MnaMatrix {
 impl MnaMatrix {
     pub fn new(num_nodes: usize, num_voltage_sources: usize) -> Self {
         let size = num_nodes + num_voltage_sources;
-        Self {
+        let mut m = Self {
             matrix: DMatrix::zeros(size, size),
             rhs: DVector::zeros(size),
             num_nodes,
+        };
+        // Global GMIN: Add a tiny conductance from every node to ground to avoid singular matrices.
+        for i in 0..num_nodes {
+            m.matrix[(i, i)] += 1e-12;
         }
+        m
     }
 }
 
@@ -49,11 +54,15 @@ pub struct ComplexMnaMatrix {
 impl ComplexMnaMatrix {
     pub fn new(num_nodes: usize, num_voltage_sources: usize) -> Self {
         let size = num_nodes + num_voltage_sources;
-        Self {
+        let mut m = Self {
             matrix: DMatrix::from_element(size, size, Complex64::new(0.0, 0.0)),
             rhs: DVector::from_element(size, Complex64::new(0.0, 0.0)),
             num_nodes,
+        };
+        for i in 0..num_nodes {
+            m.matrix[(i, i)] += Complex64::new(1e-12, 0.0);
         }
+        m
     }
 }
 

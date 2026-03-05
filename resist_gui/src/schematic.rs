@@ -3,17 +3,19 @@ use std::collections::HashMap;
 use eframe::egui;
 use eframe::egui::{Color32, Pos2, Stroke, Vec2};
 
-use crate::sim_state::{ComponentKind, GridPoint, Rotation, SelectedEntity, SimState};
+use crate::sim_state::{ComponentKind, Position, Rotation, SelectedEntity, SimState};
 
-const GRID: f32 = 10.0;
 const COMP_COLOR: Color32 = Color32::from_rgb(180, 210, 240);
 const WIRE_COLOR: Color32 = Color32::from_rgb(80, 180, 80);
-const NODE_COLOR: Color32 = Color32::from_rgb(255, 200, 60);
 const TEXT_COLOR: Color32 = Color32::from_rgb(200, 200, 220);
 const SELECT_COLOR: Color32 = Color32::from_rgb(255, 80, 200);
 
-fn grid_to_px(origin: Pos2, p: GridPoint) -> Pos2 {
-    Pos2::new(origin.x + p.x as f32 * GRID, origin.y + p.y as f32 * GRID)
+pub fn world_to_screen(origin: Pos2, world: Position) -> Pos2 {
+    Pos2::new(origin.x + world.x, origin.y + world.y)
+}
+
+pub fn screen_to_world(origin: Pos2, screen: Pos2) -> Position {
+    Position::new(screen.x - origin.x, screen.y - origin.y)
 }
 
 fn rot(v: Vec2, r: Rotation) -> Vec2 {
@@ -36,42 +38,35 @@ pub fn draw_schematic(ui: &mut egui::Ui, sim: &mut SimState) {
     }
 
     let (response, painter) =
-        ui.allocate_painter(ui.available_size(), egui::Sense::hover());
+        ui.allocate_painter(ui.available_size(), egui::Sense::click());
     let origin = response.rect.left_top() + Vec2::new(100.0, 100.0);
 
     // 1. Draw grid dots
-    let cols = 100;
-    let rows = 60;
-    for r in -10..rows {
-        for c in -10..cols {
-            let p = grid_to_px(origin, GridPoint::new(c, r));
+    let cols = 1000;
+    let rows = 600;
+    for r in (-100..rows).step_by(10) {
+        for c in (-100..cols).step_by(10) {
+            let p = world_to_screen(origin, Position::new(c as f32, r as f32));
             painter.circle_filled(p, 1.0, Color32::from_rgb(40, 40, 50));
         }
     }
 
     // 2. Draw wires
-    let mut connection_counts: HashMap<GridPoint, usize> = HashMap::new();
-
     for wire in &layout.wires {
-        let pa = grid_to_px(origin, wire.a);
-        let pb = grid_to_px(origin, wire.b);
+        let pa = world_to_screen(origin, wire.start);
+        let pb = world_to_screen(origin, wire.end);
         painter.line_segment([pa, pb], Stroke::new(2.0, WIRE_COLOR));
-
-        *connection_counts.entry(wire.a).or_insert(0) += 1;
-        *connection_counts.entry(wire.b).or_insert(0) += 1;
     }
 
-    // 3. Draw junction dots (where >= 3 wires connect)
-    for (pt, count) in connection_counts {
-        if count >= 3 {
-            let px = grid_to_px(origin, pt);
-            painter.circle_filled(px, 3.5, WIRE_COLOR);
-        }
+    // 3. Draw junction dots (explicitly defined)
+    for &pt in &layout.junctions {
+        let px = world_to_screen(origin, pt);
+        painter.circle_filled(px, 3.5, WIRE_COLOR);
     }
 
     // 4. Draw components
     for comp in &layout.components {
-        let center = grid_to_px(origin, comp.pos);
+        let center = world_to_screen(origin, comp.pos);
         
         let is_selected = matches!(&sim.selection, SelectedEntity::Component(id) if id == &comp.id);
         
@@ -99,6 +94,7 @@ pub fn draw_schematic(ui: &mut egui::Ui, sim: &mut SimState) {
             ComponentKind::Diode => draw_diode(&painter, center, comp.rotation),
             ComponentKind::Bjt { is_npn } => draw_bjt(&painter, center, comp.rotation, *is_npn),
             ComponentKind::Mosfet { is_nmos } => draw_mosfet(&painter, center, comp.rotation, *is_nmos),
+            ComponentKind::OpAmp => draw_opamp(&painter, center, comp.rotation),
         }
 
         // Component label
@@ -120,7 +116,7 @@ pub fn draw_schematic(ui: &mut egui::Ui, sim: &mut SimState) {
             _ => false,
         };
         
-        let px = grid_to_px(origin, pos);
+        let px = world_to_screen(origin, pos);
 
         if is_selected {
             painter.circle_stroke(px, 12.0, Stroke::new(2.5, SELECT_COLOR));
@@ -142,9 +138,9 @@ pub fn draw_schematic(ui: &mut egui::Ui, sim: &mut SimState) {
         let mut hovered_entity = None;
 
         // Check nodes first (tighter hit radius)
-        for (&node_id, &grid_pos) in &layout.node_positions {
-            let px = grid_to_px(origin, grid_pos);
-            if (pos - px).length() < 12.0 {
+        for (&node_id, &node_pos) in &layout.node_positions {
+            let px = world_to_screen(origin, node_pos);
+            if (pos - px).length() < 15.0 {
                 hovered_entity = Some(SelectedEntity::Node(node_id));
                 break; // Only test closest
             }
@@ -153,12 +149,16 @@ pub fn draw_schematic(ui: &mut egui::Ui, sim: &mut SimState) {
         // Check components (larger bounding box)
         if hovered_entity.is_none() {
             for comp in &layout.components {
-                let center = grid_to_px(origin, comp.pos);
+                let center = world_to_screen(origin, comp.pos);
                 if (pos - center).length() < 25.0 {
                     hovered_entity = Some(SelectedEntity::Component(comp.id.clone()));
                     break;
                 }
             }
+        }
+
+        if hovered_entity.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         }
 
         if clicked {
@@ -180,8 +180,8 @@ pub fn draw_schematic(ui: &mut egui::Ui, sim: &mut SimState) {
         if let Some(SelectedEntity::Node(hovered_node)) = hovered_entity {
             if let Some(dc) = &sim.dc {
                 if let Some(&v) = dc.node_voltages.get(&hovered_node) {
-                    let grid_pos = layout.node_positions.get(&hovered_node).unwrap();
-                    let px = grid_to_px(origin, *grid_pos);
+                    let node_pos = layout.node_positions.get(&hovered_node).unwrap();
+                    let px = world_to_screen(origin, *node_pos);
                     
                     let label = format!("Node {:?}: {:.4} V", hovered_node, v);
                     painter.rect_filled(
@@ -430,5 +430,50 @@ fn draw_mosfet(painter: &egui::Painter, c: Pos2, r: Rotation, is_nmos: bool) {
         let a2 = arrow_pt + rot(Vec2::new(-4.0, 3.0), r);
         painter.line_segment([arrow_pt, a1], Stroke::new(2.0, COMP_COLOR));
         painter.line_segment([arrow_pt, a2], Stroke::new(2.0, COMP_COLOR));
+    }
+}
+
+fn draw_opamp(painter: &egui::Painter, c: Pos2, r: Rotation) {
+    let p1 = c + rot(Vec2::new(-16.0, -16.0), r);
+    let p2 = c + rot(Vec2::new(-16.0, 16.0), r);
+    let p3 = c + rot(Vec2::new(20.0, 0.0), r);
+
+    // Triangle
+    painter.add(egui::Shape::convex_polygon(
+        vec![p1, p2, p3],
+        Color32::TRANSPARENT,
+        Stroke::new(2.0, COMP_COLOR),
+    ));
+
+    // IN+ (bottom)
+    painter.line_segment([c + rot(Vec2::new(-16.0, 10.0), r), c + rot(Vec2::new(-24.0, 10.0), r)], Stroke::new(2.0, COMP_COLOR));
+    painter.text(c + rot(Vec2::new(-10.0, 10.0), r), egui::Align2::LEFT_CENTER, "+", egui::FontId::monospace(10.0), COMP_COLOR);
+
+    // IN- (top)
+    painter.line_segment([c + rot(Vec2::new(-16.0, -10.0), r), c + rot(Vec2::new(-24.0, -10.0), r)], Stroke::new(2.0, COMP_COLOR));
+    painter.text(c + rot(Vec2::new(-10.0, -10.0), r), egui::Align2::LEFT_CENTER, "−", egui::FontId::monospace(10.0), COMP_COLOR);
+
+    // OUT
+    painter.line_segment([p3, c + rot(Vec2::new(28.0, 0.0), r)], Stroke::new(2.0, COMP_COLOR));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_coordinate_transforms() {
+        let origin = Pos2::new(100.0, 100.0);
+        let world = Position::new(50.0, 20.0);
+        
+        // World -> Screen
+        let screen = world_to_screen(origin, world);
+        assert_eq!(screen.x, 150.0);
+        assert_eq!(screen.y, 120.0);
+        
+        // Screen -> World
+        let back_to_world = screen_to_world(origin, screen);
+        assert_eq!(back_to_world.x, world.x);
+        assert_eq!(back_to_world.y, world.y);
     }
 }

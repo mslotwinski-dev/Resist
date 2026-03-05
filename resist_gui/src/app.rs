@@ -47,17 +47,14 @@ impl eframe::App for ResistApp {
             });
         });
 
-        // Left panel — Schematic
-        egui::SidePanel::left("schematic_panel")
-            .default_width(500.0)
+        let screen_width = ctx.screen_rect().width();
+
+        // Left panel — Plots
+        egui::SidePanel::left("plot_panel")
+            .default_width(screen_width * 0.3)
             .resizable(true)
             .show(ctx, |ui| {
-                ui.heading(
-                    egui::RichText::new("Schematic")
-                        .color(egui::Color32::from_rgb(180, 180, 200)),
-                );
-                ui.separator();
-                schematic::draw_schematic(ui, &mut self.sim);
+                plot_panel::draw_plot(ui, &self.sim);
             });
 
         // Right panel — Properties / Multimeter
@@ -132,9 +129,14 @@ impl eframe::App for ResistApp {
                 }
             });
 
-        // Central panel — Plot
+        // Central panel — Schematic
         egui::CentralPanel::default().show(ctx, |ui| {
-            plot_panel::draw_plot(ui, &self.sim);
+            ui.heading(
+                egui::RichText::new("Schematic")
+                    .color(egui::Color32::from_rgb(180, 180, 200)),
+            );
+            ui.separator();
+            schematic::draw_schematic(ui, &mut self.sim);
         });
     }
 }
