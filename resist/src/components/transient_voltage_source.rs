@@ -4,10 +4,20 @@ use crate::core::{ComplexMnaMatrix, MnaMatrix, NodeId};
 use crate::error::ResistError;
 
 /// Built-in waveforms for transient analysis.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub enum Waveform {
     /// Constant DC value.
     Dc(f64),
+
+    /// Pure step waveform.
+    Step {
+        /// Initial voltage (V) before delay.
+        v1: f64,
+        /// Step voltage (V) after delay.
+        v2: f64,
+        /// Time delay before step (s).
+        delay: f64,
+    },
 
     /// Pulsed waveform.
     Pulse {
@@ -34,6 +44,21 @@ pub enum Waveform {
         freq: f64,
         phase_deg: f64,
     },
+
+    /// Custom mathematical or programmatic waveform.
+    Custom(std::sync::Arc<dyn Fn(f64) -> f64 + Send + Sync>),
+}
+
+impl std::fmt::Debug for Waveform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Dc(arg0) => f.debug_tuple("Dc").field(arg0).finish(),
+            Self::Step { v1, v2, delay } => f.debug_struct("Step").field("v1", v1).field("v2", v2).field("delay", delay).finish(),
+            Self::Pulse { v1, v2, delay, rise, fall, width, period } => f.debug_struct("Pulse").field("v1", v1).field("v2", v2).field("delay", delay).field("rise", rise).field("fall", fall).field("width", width).field("period", period).finish(),
+            Self::Sine { offset, amplitude, freq, phase_deg } => f.debug_struct("Sine").field("offset", offset).field("amplitude", amplitude).field("freq", freq).field("phase_deg", phase_deg).finish(),
+            Self::Custom(_) => f.debug_tuple("Custom").field(&"<closure>").finish(),
+        }
+    }
 }
 
 impl Waveform {
@@ -41,6 +66,14 @@ impl Waveform {
     pub fn evaluate(&self, t: f64) -> f64 {
         match self {
             Waveform::Dc(v) => *v,
+
+            Waveform::Step { v1, v2, delay } => {
+                if t < *delay {
+                    *v1
+                } else {
+                    *v2
+                }
+            }
 
             Waveform::Pulse {
                 v1,
@@ -79,6 +112,8 @@ impl Waveform {
                 let phase_rad = phase_deg.to_radians();
                 offset + amplitude * (2.0 * std::f64::consts::PI * freq * t + phase_rad).sin()
             }
+            
+            Waveform::Custom(closure) => closure(t),
         }
     }
 }

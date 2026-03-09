@@ -1,0 +1,27 @@
+// Sallen-Key Active Low-Pass Filter
+// Utilizes an Operational Amplifier (VCVS) with positive feedback
+
+// 1V AC source swept from 10Hz to 1MHz
+let vsrc = SineSource(input, gnd, 0, 1, 1k, 0).pos(50, 150).rot(90)
+
+// Two RC stages
+let r1 = Resistor(input, n1, 10k).pos(150, 80)
+let r2 = Resistor(n1, op_pos, 10k).pos(250, 80)
+
+// Feedback capacitor from op-amp output to first stage
+let c1 = Capacitor(n1, output, 10n).pos(250, 20)
+// Shunt capacitor to ground
+let c2 = Capacitor(op_pos, gnd, 10n).pos(350, 150).rot(90)
+
+// VCVS representing an Ideal Op-Amp (gain 1e5 for closed-loop buffer)
+// VCVS(out_p, out_n, in_p, in_n, gain)
+// Unity-gain configuration: negative input tied directly to output.
+let op_amp = VCVS(output, gnd, op_pos, output, 100k).pos(450, 100)
+
+let load = Resistor(output, gnd, 1k).pos(550, 150).rot(90)
+
+// Analyze AC frequency response
+analyze.ac(start: 10, stop: 1M, points: 100)
+
+// Also run a transient for 2ms
+analyze.transient(stop: 2m, step: 10u)

@@ -1,0 +1,21 @@
+// Underdamped RLC Step Response
+// Demonstrates how StepSource triggers ringing in an LC tank circuit.
+
+// 5V Step Source starting at t=10us
+let vsrc = StepSource(input, gnd, 0, 5, 10u).pos(50, 150).rot(90)
+
+// Series Resistor (small value to ensure underdamped response)
+let r1 = Resistor(input, n1, 10).pos(150, 80)
+
+// Series Inductor (tank)
+let l1 = Inductor(n1, out, 1m).pos(250, 80)
+
+// Parallel Capacitor (tank)
+let c1 = Capacitor(out, gnd, 100n).pos(350, 150).rot(90)
+
+// Load Resistor
+let rload = Resistor(out, gnd, 10k).pos(450, 150).rot(90)
+
+// Run Transient Analysis
+// uic: true ensures the capacitors start at 0V prior to the step at 10us.
+analyze.transient(stop: 5m, step: 10u, uic: true)

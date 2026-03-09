@@ -1,0 +1,139 @@
+// ═══════════════════════════════════════════════════════════════════════
+//  ResistScript v2 (.res) — PEG Grammar
+//  Modern, Python/JS-inspired DSL for procedural circuit generation.
+// ═══════════════════════════════════════════════════════════════════════
+
+program = { SOI ~ statement* ~ EOI }
+
+// ── Statements ──────────────────────────────────────────────────────
+statement = {
+    let_stmt
+  | for_stmt
+  | if_stmt
+  | analyze_stmt
+  | assign_stmt
+  | expr_stmt
+}
+
+// ── let ─────────────────────────────────────────────────────────────
+// let r1 = Resistor(a, b, 47k).pos(100, 200).rot(90);
+// let x = 10k;
+let_stmt = { "let" ~ ident ~ "=" ~ expr ~ ";"? }
+
+// ── Assignment ──────────────────────────────────────────────────────
+assign_stmt = { ident ~ "=" ~ expr ~ ";"? }
+
+// ── Control Flow ────────────────────────────────────────────────────
+// for i in 1..5 { ... }
+for_stmt = {
+    "for" ~ ident ~ "in" ~ expr ~ ".." ~ expr ~ block
+}
+
+if_stmt = {
+    "if" ~ expr ~ block ~ ("else" ~ block)?
+}
+
+block = { "{" ~ statement* ~ "}" }
+
+// ── Analysis Commands ───────────────────────────────────────────────
+// analyze.dc();
+// analyze.transient(stop: 10m, step: 1u);
+analyze_stmt = {
+    "analyze" ~ "." ~ sim_kind ~ "(" ~ sim_params? ~ ")" ~ ";"?
+}
+
+sim_kind   = { "transient" | "ac" | "dc" }
+sim_params = { sim_param ~ ("," ~ sim_param)* }
+sim_param  = { ident ~ ":" ~ expr }
+
+// ── Expression statement ────────────────────────────────────────────
+expr_stmt = { expr ~ ";"? }
+
+// ── Expressions ─────────────────────────────────────────────────────
+expr = { comparison }
+
+comparison = { add_expr ~ (comp_op ~ add_expr)* }
+comp_op    = { ">=" | "<=" | "!=" | "==" | ">" | "<" }
+
+add_expr = { mul_expr ~ (add_op ~ mul_expr)* }
+add_op   = { "+" | "-" }
+
+mul_expr = { unary_expr ~ (mul_op ~ unary_expr)* }
+mul_op   = { "*" | "/" | "%" }
+
+unary_expr = { unary_op? ~ postfix_expr }
+unary_op   = { "-" }
+
+// Postfix: method chaining  .pos(100, 200).rot(90)
+postfix_expr = { atom ~ method_call* }
+method_call  = { "." ~ ident ~ "(" ~ arg_list? ~ ")" }
+
+atom = {
+    bool_lit
+  | component_ctor
+  | phasor
+  | lambda_expr
+  | if_expr
+  | func_call
+  | eng_number
+  | imag_number
+  | number
+  | string_lit
+  | "(" ~ expr ~ ")"
+  | dyn_ident
+  | ident
+}
+
+// ── Lambdas & If-Expressions ─────────────────────────────────────────
+lambda_expr = { "|" ~ ident ~ "|" ~ block_or_expr }
+block_or_expr = { block | expr }
+
+if_expr = { "if" ~ expr ~ block_or_expr ~ "else" ~ block_or_expr }
+
+// ── Component Constructors ──────────────────────────────────────────
+// Resistor(node_a, node_b, 47k)
+// Capacitor(inp, out, 100n)
+component_ctor = {
+    comp_type_kw ~ "(" ~ arg_list ~ ")"
+}
+
+comp_type_kw = {
+    "Resistor" | "Capacitor" | "Inductor"
+  | "VSource" | "ISource" | "Diode" | "StepSource" | "SineSource"
+  | "VCVS" | "BJT" | "MOSFET" | "FuncVSource"
+}
+
+// ── Phasor: magnitude @ phase ───────────────────────────────────────
+phasor = { (eng_number | number) ~ "@" ~ (eng_number | number) }
+
+// ── Function Calls ──────────────────────────────────────────────────
+func_call = { ident ~ "(" ~ arg_list? ~ ")" }
+arg_list  = { arg ~ ("," ~ arg)* }
+arg       = { (ident ~ ":")? ~ expr }
+
+// ── Dynamic identifiers: node_{i}, r_{i+1} ─────────────────────────
+dyn_ident = @{
+    (!(ASCII_ALPHANUMERIC ~ "_{") ~ (ASCII_ALPHA | ASCII_DIGIT | "_"))* ~ (ASCII_ALPHA | ASCII_DIGIT) ~ "_{" ~ (!("}" | "\n") ~ ANY)* ~ "}"
+}
+
+// ── Numbers with Engineering Suffixes ───────────────────────────────
+eng_number = @{ number ~ eng_suffix }
+eng_suffix = { "Meg" | "meg" | "kHz" | "Hz" | "k" | "K" | "m" | "u" | "n" | "p" | "f" | "G" | "M" | "T" | "V" | "A" }
+
+// Imaginary literal: 3i
+imag_number = @{ number ~ "i" }
+
+bool_lit = { "true" | "false" }
+
+// Plain number
+number = @{ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ (("e" | "E") ~ ("-" | "+")? ~ ASCII_DIGIT+)? }
+
+// ── String Literals ─────────────────────────────────────────────────
+string_lit = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
+// ── Identifiers ─────────────────────────────────────────────────────
+ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// ── Whitespace & Comments ───────────────────────────────────────────
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* | "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

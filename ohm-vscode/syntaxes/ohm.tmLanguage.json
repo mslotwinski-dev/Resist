@@ -1,0 +1,65 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Ohm",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#components"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#strings"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "match": "//.*$",
+          "name": "comment.line.double-slash.ohm"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "match": "\\b(let|for|in|analyze|dc|transient|ac|if|else|true|false)\\b",
+          "name": "keyword.control.ohm"
+        }
+      ]
+    },
+    "components": {
+      "patterns": [
+        {
+          "match": "\\b(Resistor|Capacitor|Inductor|VSource|StepSource|ISource|Diode)\\b",
+          "name": "support.class.component.ohm"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "match": "\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?(k|K|M|Meg|G|T|m|u|n|p|f|V|A|Hz|s)?\\b",
+          "name": "constant.numeric.ohm"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.ohm"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.ohm"
+}

@@ -13,6 +13,7 @@ pub struct TransientAnalyzer<'a> {
     t_stop: f64,
     dt_initial: f64,
     max_dt: Option<f64>,
+    pub use_ic: bool,
 }
 
 #[derive(Clone)]
@@ -33,11 +34,17 @@ impl<'a> TransientAnalyzer<'a> {
             t_stop,
             dt_initial,
             max_dt: None,
+            use_ic: false,
         }
     }
 
     pub fn with_max_dt(mut self, max_dt: f64) -> Self {
         self.max_dt = Some(max_dt);
+        self
+    }
+
+    pub fn with_uic(mut self, uic: bool) -> Self {
+        self.use_ic = uic;
         self
     }
 
@@ -49,15 +56,17 @@ impl<'a> TransientAnalyzer<'a> {
         let mut x_prev = DVector::zeros(size);
         let mut time_points = Vec::new();
 
-        // Solve DC operating point at t=0
-        let dc = self.circuit.build_nonlinear().solve()?;
-        for (node, &vol) in &dc.node_voltages {
-            if let Some(i) = node.matrix_idx() {
-                x_prev[i] = vol;
+        if !self.use_ic {
+            // Solve DC operating point at t=0
+            let dc = self.circuit.build_nonlinear().solve()?;
+            for (node, &vol) in &dc.node_voltages {
+                if let Some(i) = node.matrix_idx() {
+                    x_prev[i] = vol;
+                }
             }
-        }
-        for (i, &curr) in dc.voltage_source_currents.iter().enumerate() {
-            x_prev[n + i] = curr;
+            for (i, &curr) in dc.voltage_source_currents.iter().enumerate() {
+                x_prev[n + i] = curr;
+            }
         }
 
         time_points.push(self.extract_time_point(0.0, &x_prev));

@@ -126,6 +126,17 @@ pub struct SimState {
     pub selection: SelectedEntity,
     /// Active plot tab.
     pub active_tab: PlotTab,
+    /// Source code in the editor.
+    pub source_code: String,
+    /// Console output lines.
+    pub console_output: Vec<ConsoleLine>,
+}
+
+/// A line of console output.
+#[derive(Clone)]
+pub struct ConsoleLine {
+    pub text: String,
+    pub is_error: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -146,6 +157,21 @@ impl Default for SimState {
             selected_nodes: Vec::new(),
             selection: SelectedEntity::None,
             active_tab: PlotTab::Transient,
+            source_code: DEFAULT_SCRIPT.to_string(),
+            console_output: Vec::new(),
         }
     }
 }
+
+/// The default script shown when the IDE opens.
+pub const DEFAULT_SCRIPT: &str = r#"// ResistScript v2 — RC Low-Pass Filter
+// Click ▶ Compile & Run to simulate!
+// Wires are auto-routed from shared nodes.
+
+let vsrc = StepSource(input, gnd, 0, 5, 10u).pos(80, 150).rot(90)
+let r1 = Resistor(input, output, 1k).pos(200, 80)
+let c1 = Capacitor(output, gnd, 100n).pos(320, 150).rot(90)
+
+analyze.dc()
+analyze.transient(stop: 1m, step: 1u)
+"#;
