@@ -50,7 +50,10 @@ sim_param  = { ident ~ ":" ~ expr }
 expr_stmt = { expr ~ ";"? }
 
 // ── Expressions ─────────────────────────────────────────────────────
-expr = { comparison }
+expr = { logical_expr }
+
+logical_expr = { comparison ~ (logical_op ~ comparison)* }
+logical_op   = { "&&" | "||" }
 
 comparison = { add_expr ~ (comp_op ~ add_expr)* }
 comp_op    = { ">=" | "<=" | "!=" | "==" | ">" | "<" }
@@ -85,10 +88,10 @@ atom = {
 }
 
 // ── Lambdas & If-Expressions ─────────────────────────────────────────
-lambda_expr = { "|" ~ ident ~ "|" ~ block_or_expr }
-block_or_expr = { block | expr }
+lambda_expr = { "|" ~ ident ~ "|" ~ lambda_body }
+lambda_body = { "{" ~ expr ~ "}" | expr }
 
-if_expr = { "if" ~ expr ~ block_or_expr ~ "else" ~ block_or_expr }
+if_expr = { "if" ~ expr ~ lambda_body ~ ("else" ~ lambda_body)? }
 
 // ── Component Constructors ──────────────────────────────────────────
 // Resistor(node_a, node_b, 47k)

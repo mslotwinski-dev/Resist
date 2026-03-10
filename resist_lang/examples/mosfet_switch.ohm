@@ -1,0 +1,12 @@
+// Klucz tranzystorowy MOSFET (NMOS Switch) sterowany zewnętrznym generatorem PWM
+// Wzorcowy model ukazujący potęgę osadzania wyrażeń warunkowych (if) oraz logiki krótko zwieranionej (&&, ||) prosto do JIT MNA.
+
+let v_power = VSource(vcc, gnd, 50).pos(10, 3).rot(90)
+let r_load = Resistor(vcc, drain, 10).pos(7, 4).rot(90)
+let v_pwm = FuncVSource(gate, gnd, |t| { 
+    if t % 100u < 25u && t > 0 { 5 } else { 0 } 
+}).pos(3, 8).rot(90)
+let m_switch = MOSFET(drain, gate, gnd, gnd, false).pos(6, 8)
+
+// 5. Powinniśmy zaobserwować płynne powstawanie drgań napięcia rzędu ~50V na Drain i kwadratową odpowiedź na bramce.
+analyze.transient(stop: 500u, step: 1u)

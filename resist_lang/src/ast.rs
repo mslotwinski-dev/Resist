@@ -125,4 +125,5 @@ pub enum Expr {
 pub enum BinOpKind {
     Add, Sub, Mul, Div, Rem,
     Gt, Lt, Ge, Le, Eq, Ne,
+    And, Or,
 }

@@ -17,10 +17,9 @@ use crate::interpreter::{Environment, run_program};
 pub struct LayoutEntry {
     pub name: String,
     pub comp_type: CompCtorType,
-    pub node_a: NodeId,
-    pub node_b: NodeId,
-    pub x: f32,
-    pub y: f32,
+    pub nodes: Vec<NodeId>,
+    pub x: i32,
+    pub y: i32,
     pub rotation: i32,
 }
 

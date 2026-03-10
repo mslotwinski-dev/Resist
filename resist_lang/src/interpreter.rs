@@ -162,6 +162,18 @@ fn eval_expr(env: &mut Environment, expr: &Expr) -> Value {
         }
         Expr::Neg(inner) => Value::Number(-eval_expr(env, inner).as_f64()),
         Expr::BinOp { left, op, right } => {
+            if *op == BinOpKind::And {
+                let lf = eval_expr(env, left);
+                if !lf.is_truthy() { return Value::Bool(false); }
+                let rf = eval_expr(env, right);
+                return Value::Bool(rf.is_truthy());
+            } else if *op == BinOpKind::Or {
+                let lf = eval_expr(env, left);
+                if lf.is_truthy() { return Value::Bool(true); }
+                let rf = eval_expr(env, right);
+                return Value::Bool(rf.is_truthy());
+            }
+
             let lf = eval_expr(env, left).as_f64();
             let rf = eval_expr(env, right).as_f64();
             match op {
@@ -176,6 +188,7 @@ fn eval_expr(env: &mut Environment, expr: &Expr) -> Value {
                 BinOpKind::Le => Value::Bool(lf <= rf),
                 BinOpKind::Eq => Value::Bool((lf - rf).abs() < 1e-12),
                 BinOpKind::Ne => Value::Bool((lf - rf).abs() >= 1e-12),
+                BinOpKind::And | BinOpKind::Or => unreachable!(),
             }
         }
         Expr::Lambda { .. } => Value::Void,
@@ -244,6 +257,8 @@ fn instantiate_component(env: &mut Environment, ct: CompCtorType, args: &[Arg]) 
     let na = if args.len() > 0 { resolve_node_arg(env, &args[0]) } else { NodeId::GROUND };
     let nb = if args.len() > 1 { resolve_node_arg(env, &args[1]) } else { NodeId::GROUND };
     let val = if args.len() > 2 { eval_expr(env, &args[2].value).as_f64() } else { 0.0 };
+    
+    let mut layout_nodes = vec![na, nb];
 
     match ct {
         CompCtorType::Resistor => {
@@ -302,6 +317,8 @@ fn instantiate_component(env: &mut Environment, ct: CompCtorType, args: &[Arg]) 
             let in_p = if args.len() > 2 { resolve_node_arg(env, &args[2]) } else { NodeId::GROUND };
             let in_n = if args.len() > 3 { resolve_node_arg(env, &args[3]) } else { NodeId::GROUND };
             let gain = if args.len() > 4 { eval_expr(env, &args[4].value).as_f64() } else { 1.0 };
+            layout_nodes.push(in_p);
+            layout_nodes.push(in_n);
             env.circuit.add_vcvs(&comp_name, na, nb, in_p, in_n, gain);
             env.log.push(format!("  + E (VCVS) {} = {} * V({:?},{:?})", comp_name, gain, in_p, in_n));
         }
@@ -310,6 +327,7 @@ fn instantiate_component(env: &mut Environment, ct: CompCtorType, args: &[Arg]) 
             let c = na;
             let b = nb;
             let e = if args.len() > 2 { resolve_node_arg(env, &args[2]) } else { NodeId::GROUND };
+            layout_nodes.push(e);
             let is_pnp = if args.len() > 3 { eval_expr(env, &args[3].value).is_truthy() } else { false };
             let mut model = resist::components::models::BjtModel::default();
             if is_pnp { model.is_npn = false; }
@@ -322,6 +340,8 @@ fn instantiate_component(env: &mut Environment, ct: CompCtorType, args: &[Arg]) 
             let g = nb;
             let s = if args.len() > 2 { resolve_node_arg(env, &args[2]) } else { NodeId::GROUND };
             let bulk = if args.len() > 3 { resolve_node_arg(env, &args[3]) } else { NodeId::GROUND };
+            layout_nodes.push(s);
+            layout_nodes.push(bulk);
             let is_pmos = if args.len() > 4 { eval_expr(env, &args[4].value).is_truthy() } else { false };
             let mut model = resist::components::models::MosfetModel::default();
             if is_pmos { model.is_nmos = false; }
@@ -359,10 +379,9 @@ fn instantiate_component(env: &mut Environment, ct: CompCtorType, args: &[Arg]) 
     env.layout.push(LayoutEntry {
         name: comp_name.clone(),
         comp_type: ct,
-        node_a: na,
-        node_b: nb,
-        x: 0.0,
-        y: 0.0,
+        nodes: layout_nodes,
+        x: 0,
+        y: 0,
         rotation: 0,
     });
 
@@ -378,11 +397,11 @@ fn apply_method_chain(env: &mut Environment, base: Value, calls: &[MethodCall]) 
     for call in calls {
         match call.name.as_str() {
             "pos" => {
-                let x = if call.args.len() > 0 { eval_expr(env, &call.args[0].value).as_f64() } else { 0.0 };
-                let y = if call.args.len() > 1 { eval_expr(env, &call.args[1].value).as_f64() } else { 0.0 };
+                let x = if call.args.len() > 0 { eval_expr(env, &call.args[0].value).as_f64() as i32 } else { 0 };
+                let y = if call.args.len() > 1 { eval_expr(env, &call.args[1].value).as_f64() as i32 } else { 0 };
                 if let Some(entry) = env.layout.iter_mut().find(|e| e.name == comp_name) {
-                    entry.x = x as f32;
-                    entry.y = y as f32;
+                    entry.x = x;
+                    entry.y = y;
                 }
             }
             "rot" => {
@@ -445,6 +464,18 @@ fn eval_math_only(expr: &Expr, vars: &HashMap<String, f64>, t_param: &str, t_val
         }
         Expr::Neg(inner) => -eval_math_only(inner, vars, t_param, t_val),
         Expr::BinOp { left, op, right } => {
+            if *op == BinOpKind::And {
+                let l = eval_math_only(left, vars, t_param, t_val);
+                if l == 0.0 { return 0.0; }
+                let r = eval_math_only(right, vars, t_param, t_val);
+                return if r != 0.0 { 1.0 } else { 0.0 };
+            } else if *op == BinOpKind::Or {
+                let l = eval_math_only(left, vars, t_param, t_val);
+                if l != 0.0 { return 1.0; }
+                let r = eval_math_only(right, vars, t_param, t_val);
+                return if r != 0.0 { 1.0 } else { 0.0 };
+            }
+
             let l = eval_math_only(left, vars, t_param, t_val);
             let r = eval_math_only(right, vars, t_param, t_val);
             match op {
@@ -459,6 +490,7 @@ fn eval_math_only(expr: &Expr, vars: &HashMap<String, f64>, t_param: &str, t_val
                 BinOpKind::Le => if l <= r { 1.0 } else { 0.0 },
                 BinOpKind::Eq => if (l - r).abs() < 1e-12 { 1.0 } else { 0.0 },
                 BinOpKind::Ne => if (l - r).abs() >= 1e-12 { 1.0 } else { 0.0 },
+                BinOpKind::And | BinOpKind::Or => unreachable!(),
             }
         }
         Expr::IfExpr { cond, then_val, else_val } => {

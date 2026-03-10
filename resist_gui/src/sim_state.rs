@@ -4,23 +4,16 @@ use resist::analysis::nonlinear::NonLinearDcResult;
 use resist::analysis::transient::TransientResult;
 use resist::NodeId;
 
-/// Explicit coordinates on the schematic canvas.
-#[derive(Clone, Copy, Debug)]
+/// Explicit grid coordinates on the schematic canvas.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
-    pub x: f32,
-    pub y: f32,
+    pub x: i32,
+    pub y: i32,
 }
 
 impl Position {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub fn new(x: i32, y: i32) -> Self {
         Self { x, y }
-    }
-}
-
-// Equality based on a small epsilon since it's float
-impl PartialEq for Position {
-    fn eq(&self, other: &Self) -> bool {
-        (self.x - other.x).abs() < 1e-3 && (self.y - other.y).abs() < 1e-3
     }
 }
 
@@ -45,8 +38,7 @@ pub struct ComponentInfo {
     pub id: String,
     pub name: String,
     pub kind: ComponentKind,
-    pub node_a: NodeId,
-    pub node_b: NodeId,
+    pub pins: Vec<NodeId>,
     /// Explicit center position on the canvas.
     pub pos: Position,
     pub rotation: Rotation,

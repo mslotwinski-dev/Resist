@@ -1,0 +1,18 @@
+// Klasyczny Wzmacniacz w Układzie Wspólnego Emitera (Common Emitter BJT)
+// Wysoce zintegrowany projekt analogowy wykorzystujący pasywne polaryzowanie punktu pracy i pojemności sprzęgające.
+
+// 1. Sztywne zasilanie główne układu (15V DC)
+let vcc_src = VSource(vcc, gnd, 15).pos(1, 3).rot(90)
+let r_b1 = Resistor(vcc, base, 100k).pos(5, 4).rot(90)
+let r_b2 = Resistor(base, gnd, 22k).pos(5, 8).rot(90)
+let r_c = Resistor(vcc, coll, 4.7k).pos(9, 4).rot(90)
+let r_e = Resistor(emit, gnd, 1k).pos(9, 11).rot(90)
+let q1 = BJT(coll, base, emit, false).pos(8, 8)
+
+let v_sig = FuncVSource(sig_in, gnd, |t| { sin(2 * PI * 1k * t) * 0.05 }).pos(1, 9).rot(90)
+let c_in  = Capacitor(sig_in, base, 10u).pos(3, 8)
+let c_out = Capacitor(coll, sig_out, 10u).pos(11, 5)
+let r_load = Resistor(sig_out, gnd, 10k).pos(14, 8).rot(90)
+
+// 7. Analizujemy układ pobudzony sinusem - uwidoczni poprawnie spolaryzowany wzmacniacz w klasie A
+analyze.transient(stop: 5m, step: 10u)

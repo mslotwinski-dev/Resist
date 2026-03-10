@@ -75,8 +75,7 @@ impl ResistApp {
                         id: entry.name.clone(),
                         name: entry.name.clone(),
                         kind,
-                        node_a: entry.node_a,
-                        node_b: entry.node_b,
+                        pins: entry.nodes.clone(),
                         pos: Position::new(entry.x, entry.y),
                         rotation,
                     });
@@ -433,8 +432,8 @@ fn draw_multimeter(ui: &mut egui::Ui, sim: &SimState) {
             ui.separator();
             if let Some(comp) = sim.layout.components.iter().find(|c| &c.id == id) {
                 if let Some(dc) = &sim.dc {
-                    let va = dc.node_voltages.get(&comp.node_a).copied().unwrap_or(0.0);
-                    let vb = dc.node_voltages.get(&comp.node_b).copied().unwrap_or(0.0);
+                    let va = comp.pins.get(0).and_then(|id| dc.node_voltages.get(id)).copied().unwrap_or(0.0);
+                    let vb = comp.pins.get(1).and_then(|id| dc.node_voltages.get(id)).copied().unwrap_or(0.0);
                     let v_drop = va - vb;
                     ui.label(format!("Node A: {:.4} V", va));
                     ui.label(format!("Node B: {:.4} V", vb));

@@ -84,6 +84,7 @@ fn parse_block(pair: Pair<'_, Rule>) -> Vec<Statement> {
 fn parse_expr(pair: Pair<'_, Rule>) -> Expr {
     match pair.as_rule() {
         Rule::expr => parse_expr(pair.into_inner().next().unwrap()),
+        Rule::logical_expr => parse_binop_chain(pair, parse_logical_op),
         Rule::comparison => parse_binop_chain(pair, parse_comp_op),
         Rule::add_expr => parse_binop_chain(pair, parse_add_op),
         Rule::mul_expr => parse_binop_chain(pair, parse_mul_op),
@@ -140,33 +141,12 @@ fn parse_expr(pair: Pair<'_, Rule>) -> Expr {
         Rule::lambda_expr => {
             let mut it = pair.into_inner();
             let param = it.next().unwrap().as_str().to_string();
-            // inner could be block or expr. Both wrap logic.
             let inner_pair = it.next().unwrap();
-            let body = if inner_pair.as_rule() == Rule::block_or_expr {
-                // Dig into block_or_expr
+            let body = if inner_pair.as_rule() == Rule::lambda_body {
                 let innerest = inner_pair.into_inner().next().unwrap();
-                if innerest.as_rule() == Rule::block {
-                    // It's a block. If block just has an expr_stmt, use it.
-                    let mut stmts = innerest.into_inner();
-                    if let Some(stmt_pair) = stmts.next() {
-                        if stmt_pair.as_rule() == Rule::statement {
-                             let stmt_inner = stmt_pair.into_inner().next().unwrap();
-                             if stmt_inner.as_rule() == Rule::expr_stmt {
-                                 parse_expr(stmt_inner.into_inner().next().unwrap())
-                             } else {
-                                 Expr::Number(0.0) // Fallback for complex blocks
-                             }
-                        } else {
-                            Expr::Number(0.0)
-                        }
-                    } else {
-                        Expr::Number(0.0)
-                    }
-                } else {
-                    parse_expr(innerest)
-                }
+                parse_expr(innerest)
             } else {
-                parse_expr(inner_pair)
+                Expr::Number(0.0)
             };
             Expr::Lambda { param, body: Box::new(body) }
         }
@@ -174,25 +154,17 @@ fn parse_expr(pair: Pair<'_, Rule>) -> Expr {
             let mut it = pair.into_inner();
             let cond = Box::new(parse_expr(it.next().unwrap()));
             
-            let parse_block_or_expr = |p: pest::iterators::Pair<'_, Rule>| {
+            let parse_lambda_body = |p: pest::iterators::Pair<'_, Rule>| {
                 let innerest = p.into_inner().next().unwrap();
-                if innerest.as_rule() == Rule::block {
-                    let mut stmts = innerest.into_inner();
-                    if let Some(stmt_pair) = stmts.next() {
-                        if stmt_pair.as_rule() == Rule::statement {
-                             let stmt_inner = stmt_pair.into_inner().next().unwrap();
-                             if stmt_inner.as_rule() == Rule::expr_stmt {
-                                 parse_expr(stmt_inner.into_inner().next().unwrap())
-                             } else { Expr::Number(0.0) }
-                        } else { Expr::Number(0.0) }
-                    } else { Expr::Number(0.0) }
-                } else {
-                    parse_expr(innerest)
-                }
+                parse_expr(innerest)
             };
             
-            let then_val = Box::new(parse_block_or_expr(it.next().unwrap()));
-            let else_val = Box::new(parse_block_or_expr(it.next().unwrap()));
+            let then_val = Box::new(parse_lambda_body(it.next().unwrap()));
+            let else_val = if let Some(nxt) = it.next() {
+                Box::new(parse_lambda_body(nxt))
+            } else {
+                Box::new(Expr::Number(0.0))
+            };
             Expr::IfExpr { cond, then_val, else_val }
         }
         Rule::func_call => {
@@ -254,6 +226,13 @@ fn parse_binop_chain(pair: Pair<'_, Rule>, op_parser: fn(&str) -> Option<BinOpKi
         left = Expr::BinOp { left: Box::new(left), op, right: Box::new(right) };
     }
     left
+}
+
+fn parse_logical_op(s: &str) -> Option<BinOpKind> {
+    match s {
+        "&&" => Some(BinOpKind::And), "||" => Some(BinOpKind::Or),
+        _ => None,
+    }
 }
 
 fn parse_comp_op(s: &str) -> Option<BinOpKind> {
