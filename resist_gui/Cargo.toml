@@ -5,9 +5,6 @@ edition = "2024"
 
 [dependencies]
 resist = { path = "../resist" }
-resist_lang = { path = "../resist_lang" }
 eframe = "0.31"
 egui_plot = "0.31"
-regex = "1.10"
 image = { version = "0.24", features = ["png"] }
-pathfinding = "4.14.0"

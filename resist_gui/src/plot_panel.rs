@@ -82,10 +82,10 @@ fn draw_transient(ui: &mut egui::Ui, sim: &SimState) {
                     }).collect()
                 }
                 SelectedEntity::Component(id) => {
-                    if let Some(comp) = sim.layout.components.iter().find(|c| &c.id == id) {
+                    if let Some(nodes) = sim.last_component_nodes.get(id) {
                         tr.time_points.iter().map(|tp| {
-                            let v1 = comp.pins.get(0).and_then(|id| tp.node_voltages.get(id)).copied().unwrap_or(0.0);
-                            let v2 = comp.pins.get(1).and_then(|id| tp.node_voltages.get(id)).copied().unwrap_or(0.0);
+                            let v1 = nodes.get(0).and_then(|id| tp.node_voltages.get(id)).copied().unwrap_or(0.0);
+                            let v2 = nodes.get(1).and_then(|id| tp.node_voltages.get(id)).copied().unwrap_or(0.0);
                             [tp.time, v1 - v2] // Plotting voltage drop
                         }).collect()
                     } else {
@@ -149,10 +149,10 @@ fn draw_bode(ui: &mut egui::Ui, sim: &SimState) {
                     [f.log10(), mag_db]
                 }).collect(),
                 SelectedEntity::Component(id) => {
-                    if let Some(comp) = sim.layout.components.iter().find(|c| &c.id == id) {
+                    if let Some(nodes) = sim.last_component_nodes.get(id) {
                         sim.bode.iter().map(|(f, res)| {
-                            let c1 = comp.pins.get(0).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
-                            let c2 = comp.pins.get(1).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
+                            let c1 = nodes.get(0).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
+                            let c2 = nodes.get(1).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
                             let diff = c1 - c2;
                             let mag = diff.norm();
                             let mag_db = if mag > 1e-15 { 20.0 * mag.log10() } else { -300.0 };
@@ -198,10 +198,10 @@ fn draw_bode(ui: &mut egui::Ui, sim: &SimState) {
                     [f.log10(), phase]
                 }).collect(),
                 SelectedEntity::Component(id) => {
-                    if let Some(comp) = sim.layout.components.iter().find(|c| &c.id == id) {
+                    if let Some(nodes) = sim.last_component_nodes.get(id) {
                         sim.bode.iter().map(|(f, res)| {
-                            let c1 = comp.pins.get(0).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
-                            let c2 = comp.pins.get(1).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
+                            let c1 = nodes.get(0).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
+                            let c2 = nodes.get(1).and_then(|id| res.node_voltages.get(id)).copied().unwrap_or_default();
                             let diff = c1 - c2;
                             let phase = diff.arg().to_degrees();
                             [f.log10(), phase]

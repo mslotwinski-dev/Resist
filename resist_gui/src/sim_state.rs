@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 
+use resist::NodeId;
 use resist::analysis::nonlinear::NonLinearDcResult;
 use resist::analysis::transient::TransientResult;
-use resist::NodeId;
 
-/// Explicit grid coordinates on the schematic canvas.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
     pub x: i32,
@@ -17,7 +16,6 @@ impl Position {
     }
 }
 
-/// Orientation of a component.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rotation {
     Deg0,
@@ -26,71 +24,105 @@ pub enum Rotation {
     Deg270,
 }
 
+impl Rotation {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Deg0 => Self::Deg90,
+            Self::Deg90 => Self::Deg180,
+            Self::Deg180 => Self::Deg270,
+            Self::Deg270 => Self::Deg0,
+        }
+    }
+}
+
 impl Default for Rotation {
     fn default() -> Self {
         Self::Deg0
     }
 }
 
-/// Metadata for a component drawn on the schematic.
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ComponentKind {
+    Resistor,
+    Capacitor,
+    Inductor,
+    VoltageSource,
+    CurrentSource,
+    FunctionalVoltageSource,
+    FunctionalCurrentSource,
+    Ground,
+}
+
+impl ComponentKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Resistor => "Resistor",
+            Self::Capacitor => "Capacitor",
+            Self::Inductor => "Inductor",
+            Self::VoltageSource => "VSource",
+            Self::CurrentSource => "ISource",
+            Self::FunctionalVoltageSource => "V_func",
+            Self::FunctionalCurrentSource => "I_func",
+            Self::Ground => "Ground",
+        }
+    }
+
+    pub fn default_value(self) -> f64 {
+        match self {
+            Self::Resistor => 1_000.0,
+            Self::Capacitor => 100e-9,
+            Self::Inductor => 1e-3,
+            Self::VoltageSource => 5.0,
+            Self::CurrentSource => 1e-3,
+            Self::FunctionalVoltageSource => 5.0,
+            Self::FunctionalCurrentSource => 1e-3,
+            Self::Ground => 0.0,
+        }
+    }
+
+    pub fn pin_count(self) -> usize {
+        match self {
+            Self::Ground => 1,
+            _ => 2,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PinRef {
+    pub component_id: String,
+    pub pin_index: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct Wire {
+    pub from: PinRef,
+    pub to: PinRef,
+}
+
+#[derive(Clone, Debug)]
 pub struct ComponentInfo {
     pub id: String,
     pub name: String,
     pub kind: ComponentKind,
-    pub pins: Vec<NodeId>,
-    /// Explicit center position on the canvas.
+    pub value: f64,
     pub pos: Position,
     pub rotation: Rotation,
+    pub expression: Option<String>,
 }
 
-#[derive(Clone, Debug)]
-pub enum ComponentKind {
-    Resistor(f64),
-    Capacitor(f64),
-    Inductor(f64),
-    VoltageSource(f64),
-    CurrentSource(f64),
-    Diode,
-    Bjt { is_npn: bool },
-    Mosfet { is_nmos: bool },
-    TransientSource,
-    OpAmp,
-}
-
-/// An explicit orthongonal wire segment connecting two absolute positions.
-#[derive(Clone, Debug)]
-pub struct WireSegment {
-    pub start: Position,
-    pub end: Position,
-}
-
-impl WireSegment {
-    pub fn new(start: Position, end: Position) -> Self {
-        Self { start, end }
-    }
-}
-
-/// Layout descriptor for the schematic canvas.
 #[derive(Clone, Default)]
 pub struct CircuitLayout {
     pub components: Vec<ComponentInfo>,
-    /// Node label → absolute position (used for tooltips/hit testing).
-    pub node_positions: HashMap<NodeId, Position>,
-    /// Explicit wires connecting nodes and component pins.
-    pub wires: Vec<WireSegment>,
-    /// Explicit junction points to draw connection dots.
-    pub junctions: Vec<Position>,
+    pub wires: Vec<Wire>,
 }
 
-/// I-V sweep data point.
 #[derive(Clone)]
 pub struct IvPoint {
     pub v: f64,
     pub i: f64,
 }
 
-/// Current interactive selection in the GUI.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectedEntity {
     None,
@@ -105,26 +137,38 @@ impl Default for SelectedEntity {
     }
 }
 
-/// All simulation data needed by the GUI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorMode {
+    Select,
+    Wire,
+}
+
+impl Default for EditorMode {
+    fn default() -> Self {
+        Self::Select
+    }
+}
+
 pub struct SimState {
     pub dc: Option<NonLinearDcResult>,
     pub transient: Option<Result<TransientResult, String>>,
     pub bode: Vec<(f64, resist::analysis::ac::AcAnalysisResult)>,
     pub iv_sweeps: HashMap<String, Vec<IvPoint>>,
     pub layout: CircuitLayout,
-    /// Which nodes are currently selected for plotting (legacy, to be removed)
-    pub selected_nodes: Vec<(NodeId, String)>,
-    /// Global interactive selection.
     pub selection: SelectedEntity,
-    /// Active plot tab.
     pub active_tab: PlotTab,
-    /// Source code in the editor.
-    pub source_code: String,
-    /// Console output lines.
     pub console_output: Vec<ConsoleLine>,
+    pub editor_mode: EditorMode,
+    pub pending_wire: Option<PinRef>,
+    pub dragging_component: Option<String>,
+    pub last_component_nodes: HashMap<String, Vec<NodeId>>,
+    pub transient_stop: f64,
+    pub transient_step: f64,
+    pub ac_start: f64,
+    pub ac_stop: f64,
+    pub ac_points: usize,
 }
 
-/// A line of console output.
 #[derive(Clone)]
 pub struct ConsoleLine {
     pub text: String,
@@ -145,25 +189,67 @@ impl Default for SimState {
             transient: None,
             bode: Vec::new(),
             iv_sweeps: HashMap::new(),
-            layout: CircuitLayout::default(),
-            selected_nodes: Vec::new(),
+            layout: default_layout(),
             selection: SelectedEntity::None,
             active_tab: PlotTab::Transient,
-            source_code: DEFAULT_SCRIPT.to_string(),
-            console_output: Vec::new(),
+            console_output: vec![ConsoleLine {
+                text: "Canvas mode: drag blocks, connect pins with wires, run simulation buttons."
+                    .to_string(),
+                is_error: false,
+            }],
+            editor_mode: EditorMode::Select,
+            pending_wire: None,
+            dragging_component: None,
+            last_component_nodes: HashMap::new(),
+            transient_stop: 2e-3,
+            transient_step: 1e-6,
+            ac_start: 10.0,
+            ac_stop: 1e6,
+            ac_points: 80,
         }
     }
 }
 
-/// The default script shown when the IDE opens.
-pub const DEFAULT_SCRIPT: &str = r#"// ResistScript v2 — RC Low-Pass Filter
-// Click ▶ Compile & Run to simulate!
-// Wires are auto-routed from shared nodes.
-
-let vsrc = StepSource(input, gnd, 0, 5, 10u).pos(80, 150).rot(90)
-let r1 = Resistor(input, output, 1k).pos(200, 80)
-let c1 = Capacitor(output, gnd, 100n).pos(320, 150).rot(90)
-
-analyze.dc()
-analyze.transient(stop: 1m, step: 1u)
-"#;
+fn default_layout() -> CircuitLayout {
+    CircuitLayout {
+        components: vec![
+            ComponentInfo {
+                id: "V1".to_string(),
+                name: "V1".to_string(),
+                kind: ComponentKind::VoltageSource,
+                value: 5.0,
+                pos: Position::new(3, 3),
+                rotation: Rotation::Deg90,
+                expression: None,
+            },
+            ComponentInfo {
+                id: "R1".to_string(),
+                name: "R1".to_string(),
+                kind: ComponentKind::Resistor,
+                value: 1_000.0,
+                pos: Position::new(7, 2),
+                rotation: Rotation::Deg0,
+                expression: None,
+            },
+            ComponentInfo {
+                id: "C1".to_string(),
+                name: "C1".to_string(),
+                kind: ComponentKind::Capacitor,
+                value: 100e-9,
+                pos: Position::new(7, 5),
+                rotation: Rotation::Deg90,
+                expression: None,
+            },
+            ComponentInfo {
+                id: "GND".to_string(),
+                name: "GND".to_string(),
+                kind: ComponentKind::Ground,
+                value: 0.0,
+                pos: Position::new(3, 6),
+                rotation: Rotation::Deg0,
+                expression: None,
+            },
+        ],
+        wires: vec![],
+    }
+}
